@@ -1,0 +1,6 @@
+{
+  "name": "BlazerGateway",
+  "description": "Cliente de IA multi-provedores gratuito para Android com roteador inteligente e descoberta dinâmica de modelos",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

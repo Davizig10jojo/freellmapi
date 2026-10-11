@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:translateX="24"
+        android:translateY="24">
+        <!-- Central Gateway Flame Node -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M30,4 C18,16 12,28 12,38 C12,48 20,56 30,56 C40,56 48,48 48,38 C48,26 40,14 30,4 Z M30,50 C23.4,50 18,44.6 18,38 C18,30.5 22.8,21.5 30,12.5 C37.2,21.5 42,30.5 42,38 C42,44.6 36.6,50 30,50 Z" />
+        <!-- Inner Core Spark -->
+        <path
+            android:fillColor="#FFF3E0"
+            android:pathData="M30,22 C26,29 24,34 24,39 C24,42.3 26.7,45 30,45 C33.3,45 36,42.3 36,39 C36,34 34,29 30,22 Z" />
+        <!-- Circuit Node Wings -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M8,28 L14,32 L8,36 Z M52,28 L46,32 L52,36 Z" />
+    </group>
+</vector>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary_blaze">#FF6D00</color>
+    <color name="primary_blaze_dark">#E65100</color>
+    <color name="background_dark">#0F1115</color>
+    <color name="surface_dark">#181B20</color>
+    <color name="surface_variant_dark">#22262E</color>
+    <color name="accent_teal">#00E5FF</color>
+</resources>
