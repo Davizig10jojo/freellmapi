@@ -1,0 +1,66 @@
+name: Build Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+env:
+  GRADLE_VERSION: "9.3.1"   # exigido pelo AGP 9.1.1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21          # 👈 o projeto usa sourceCompatibility 21
+
+      - name: Accept Android SDK licenses
+        run: |
+          if [ -x "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" ]; then
+            yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          fi
+
+      - name: Gerar debug.keystore temporario
+        run: |
+          if [ ! -f debug.keystore ]; then
+            echo "🔑 Gerando debug.keystore para assinatura debug..."
+            keytool -genkeypair -v -keystore debug.keystore \
+              -storepass android -alias androiddebugkey -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "debug.keystore já existe no repositório."
+          fi
+
+      - name: Preparar Gradle Wrapper
+        run: |
+          if [ -f ./gradlew ]; then
+            chmod +x ./gradlew
+          elif [ -f gradle/wrapper/gradle-wrapper.jar ]; then
+            echo "usando wrapper jar direto"
+          else
+            gradle wrapper --gradle-version "$GRADLE_VERSION"
+            chmod +x ./gradlew
+          fi
+
+      - name: Build Debug APK
+        run: |
+          if [ -f ./gradlew ]; then
+            ./gradlew assembleDebug --no-daemon
+          else
+            java -cp gradle/wrapper/gradle-wrapper.jar \
+              org.gradle.wrapper.GradleWrapperMain assembleDebug --no-daemon
+          fi
+
+      - name: Upload APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlazerGateway-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
