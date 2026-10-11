@@ -36,6 +36,16 @@ class SmartRouterTest {
         override suspend fun insertOrUpdate(tracker: UsageTrackerEntity) {
             storage["${tracker.providerId}:${tracker.modelId}"] = tracker
         }
+
+        override suspend fun clearAllCooldowns() {
+            for ((key, tracker) in storage.toMap()) {
+                storage[key] = tracker.copy(cooldownUntil = 0L, consecutiveFailures = 0)
+            }
+        }
+
+        override suspend fun clearAllTrackers() {
+            storage.clear()
+        }
     }
 
     @Test
@@ -43,14 +53,14 @@ class SmartRouterTest {
         val dao = FakeUsageTrackerDao()
         val router = SmartRouter(dao)
 
-        val prov1 = Provider(id = "p1", name = "P1", baseUrl = "https://p1.ai", requiresKey = false)
-        val prov2 = Provider(id = "p2", name = "P2", baseUrl = "https://p2.ai", requiresKey = false)
+        val prov1 = Provider(id = "openrouter", name = "OpenRouter", baseUrl = "https://openrouter.ai", requiresKey = false)
+        val prov2 = Provider(id = "groq", name = "Groq", baseUrl = "https://groq.com", requiresKey = false)
 
         val now = System.currentTimeMillis()
-        // P1 tem 18 requisições na janela de 1 min (90% do limite de 20 RPM -> excede 85%)
+        // OpenRouter tem limite de 20 RPM -> 18 requisições = 90% (ultrapassa limiar de 85%)
         dao.insertOrUpdate(
             UsageTrackerEntity(
-                providerId = "p1",
+                providerId = "openrouter",
                 modelId = "m1",
                 requestsLastMinute = 18,
                 minuteWindowStart = now,
@@ -61,10 +71,10 @@ class SmartRouterTest {
             )
         )
 
-        // P2 está limpo
+        // Groq tem limite de 30 RPM -> 2 requisições = 6% (muito abaixo de 85%)
         dao.insertOrUpdate(
             UsageTrackerEntity(
-                providerId = "p2",
+                providerId = "groq",
                 modelId = "m2",
                 requestsLastMinute = 2,
                 minuteWindowStart = now,
@@ -79,7 +89,7 @@ class SmartRouterTest {
         val chosen = router.selectCandidate(candidates, emptyMap(), proactiveThresholdPercent = 85)
 
         assertNotNull(chosen)
-        assertEquals("p2", chosen?.provider?.id)
+        assertEquals("groq", chosen?.provider?.id)
     }
 
     @Test
@@ -87,20 +97,20 @@ class SmartRouterTest {
         val dao = FakeUsageTrackerDao()
         val router = SmartRouter(dao)
 
-        // 429 com Retry-After 30s -> cooldown = 30 * 2 = 60s
+        // Groq / NVIDIA NIM (provedor RPM): 429 com Retry-After 30s -> cooldown rápido capado em 10s
         val cd429 = router.recordFailure("groq", "llama", statusCode = 429, retryAfterSeconds = 30L)
-        assertEquals(60L, cd429)
+        assertEquals(10L, cd429)
 
-        // 429 com Retry-After enorme 600s -> cooldown capado em 900s (15 min)
-        val cd429Max = router.recordFailure("groq", "llama", statusCode = 429, retryAfterSeconds = 600L)
-        assertEquals(900L, cd429Max)
+        // NVIDIA NIM: 429 sem Retry-After -> cooldown padrão de 5s
+        val cd429Nvidia = router.recordFailure("nvidia", "llama", statusCode = 429)
+        assertEquals(5L, cd429Nvidia)
 
-        // 401 -> 1 hora (3600s)
+        // 401 -> 60s (1 minuto) para permitir correção rápida da chave
         val cd401 = router.recordFailure("openrouter", "gpt-4", statusCode = 401)
-        assertEquals(3600L, cd401)
+        assertEquals(60L, cd401)
 
-        // 500 -> 2 minutos (120s)
+        // 500 -> 10s
         val cd500 = router.recordFailure("cerebras", "llama", statusCode = 500)
-        assertEquals(120L, cd500)
+        assertEquals(10L, cd500)
     }
 }

@@ -17,14 +17,17 @@ class SseParserTest {
         val chunk2 = "data: {\"choices\":[{\"delta\":{\"content\":\" mundo\"}}]}"
         val chunk3 = "\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"!\"}}]}\n\ndata: [DONE]\n\n"
 
-        val done1 = parser.processChunk(chunk1) { emittedTokens.add(it) }
-        assertEquals(false, done1)
+        val res1 = parser.processChunk(chunk1)
+        emittedTokens.addAll(res1.deltas)
+        assertEquals(false, res1.isDone)
 
-        val done2 = parser.processChunk(chunk2) { emittedTokens.add(it) }
-        assertEquals(false, done2)
+        val res2 = parser.processChunk(chunk2)
+        emittedTokens.addAll(res2.deltas)
+        assertEquals(false, res2.isDone)
 
-        val done3 = parser.processChunk(chunk3) { emittedTokens.add(it) }
-        assertEquals(true, done3)
+        val res3 = parser.processChunk(chunk3)
+        emittedTokens.addAll(res3.deltas)
+        assertEquals(true, res3.isDone)
 
         assertEquals("Olá", emittedTokens[0])
         assertEquals(" mundo", emittedTokens[1])
@@ -35,7 +38,6 @@ class SseParserTest {
     @Test
     fun `test sse parser handles empty data or comments gracefully`() {
         val parser = SseParser()
-        val tokens = mutableListOf<String>()
 
         val raw = """: ping
 data: 
@@ -45,10 +47,10 @@ data: {"choices":[{"delta":{"content":"Token"}}]}
 data: [DONE]
 
 """
-        val isDone = parser.processChunk(raw) { tokens.add(it) }
+        val result = parser.processChunk(raw)
 
-        assertTrue(isDone)
-        assertEquals(1, tokens.size)
-        assertEquals("Token", tokens[0])
+        assertTrue(result.isDone)
+        assertEquals(1, result.deltas.size)
+        assertEquals("Token", result.deltas[0])
     }
 }

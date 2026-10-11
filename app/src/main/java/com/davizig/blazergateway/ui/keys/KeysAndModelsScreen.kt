@@ -163,6 +163,7 @@ fun KeysAndModelsScreen(
                 // Ações auxiliares
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     OutlinedButton(
@@ -180,7 +181,14 @@ fun KeysAndModelsScreen(
                     ) {
                         Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Testar Todos")
+                        Text("Testar")
+                    }
+
+                    OutlinedButton(
+                        onClick = { viewModel.clearAllCooldowns() },
+                        modifier = Modifier.testTag("clear_cooldowns_button")
+                    ) {
+                        Text("Zerar Esperas")
                     }
 
                     IconButton(
@@ -562,6 +570,30 @@ fun ProviderCard(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(CyanAccent.copy(alpha = 0.15f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    } else if (provider.id == "nvidia") {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "40 RPM (Grátis)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = EmeraldHealthy,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(EmeraldHealthy.copy(alpha = 0.15f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    } else if (provider.id == "groq" || provider.id == "cerebras") {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "30 RPM",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = BlazeOrange,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(BlazeOrange.copy(alpha = 0.15f))
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }

@@ -283,15 +283,28 @@ fun ChatScreen(
                         color = if (errorNotice != null) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(
-                        onClick = { viewModel.clearNotices() },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "Fechar aviso",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(
+                            onClick = { viewModel.resetCooldownsAndRetry() },
+                            modifier = Modifier.padding(end = 4.dp)
+                        ) {
+                            Text(
+                                "Tentar Agora",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (errorNotice != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.clearNotices() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Fechar aviso",
+                                tint = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
                     }
                 }
             }

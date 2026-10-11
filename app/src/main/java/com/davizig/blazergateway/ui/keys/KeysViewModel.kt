@@ -152,6 +152,14 @@ class KeysViewModel(
         }
     }
 
+    fun clearAllCooldowns() {
+        viewModelScope.launch {
+            usageTrackerDao.clearAllCooldowns()
+            loadData()
+            _statusMessage.value = "Limites de espera e contadores redefinidos com sucesso!"
+        }
+    }
+
     fun addCustomProvider(name: String, baseUrl: String, apiKey: String, chatEndpoint: String) {
         val id = "custom_" + System.currentTimeMillis()
         val custom = Provider(

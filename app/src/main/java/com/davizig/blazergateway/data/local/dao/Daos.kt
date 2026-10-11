@@ -82,6 +82,12 @@ interface UsageTrackerDao {
     @Query("SELECT * FROM usage_trackers")
     suspend fun getAllTrackers(): List<UsageTrackerEntity>
 
+    @Query("UPDATE usage_trackers SET cooldownUntil = 0, consecutiveFailures = 0")
+    suspend fun clearAllCooldowns()
+
+    @Query("DELETE FROM usage_trackers")
+    suspend fun clearAllTrackers()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOrUpdate(tracker: UsageTrackerEntity)
 }

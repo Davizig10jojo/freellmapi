@@ -9,10 +9,8 @@ import com.davizig.blazergateway.domain.model.ModelInfo
 import com.davizig.blazergateway.domain.model.Provider
 import com.davizig.blazergateway.util.SseParser
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
@@ -29,13 +27,10 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.putJsonObject
-import okhttp3.Call
-import okhttp3.Callback
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.Response
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 
@@ -103,7 +98,6 @@ class OpenAIApiClient {
         try {
             okHttpClient.newCall(request).execute().use { response ->
                 if (!response.isSuccessful) {
-                    val code = response.code
                     return@withContext getFallbackModelsForProvider(provider.id)
                 }
 
@@ -178,14 +172,17 @@ class OpenAIApiClient {
                 val name = dto.name ?: modelId
                 val pricing = dto.pricing
 
+                // NVIDIA NIM não tem créditos pagos: 40 RPM gratuitos para todos os modelos!
+                // Pollinations, AI Horde, Kilo, OVH também são gratuitos.
                 val isFree = when {
-                    providerId in listOf("pollinations", "aihorde", "kilo", "ovh") -> true
+                    providerId in listOf("nvidia", "pollinations", "aihorde", "kilo", "ovh", "groq", "cerebras") -> true
                     dto.free == true -> true
                     pricing == null -> true
                     pricing.prompt == "0" && pricing.completion == "0" -> true
                     pricing.prompt == "0.0" && pricing.completion == "0.0" -> true
                     pricing.prompt == "0.0000" && pricing.completion == "0.0000" -> true
                     pricing.prompt.equals("free", ignoreCase = true) -> true
+                    modelId.contains(":free", ignoreCase = true) -> true
                     else -> false
                 }
 
@@ -230,6 +227,37 @@ class OpenAIApiClient {
     private fun getFallbackModelsForProvider(providerId: String): List<ModelInfo> {
         val now = System.currentTimeMillis()
         return when (providerId) {
+            "nvidia" -> listOf(
+                ModelInfo("meta/llama-3.1-8b-instruct", "nvidia", "Llama 3.1 8B Instruct (NVIDIA NIM - 40 RPM)", true, false, 128000, "0", "0", now),
+                ModelInfo("meta/llama-3.1-70b-instruct", "nvidia", "Llama 3.1 70B Instruct (NVIDIA NIM - 40 RPM)", true, false, 128000, "0", "0", now),
+                ModelInfo("meta/llama-3.3-70b-instruct", "nvidia", "Llama 3.3 70B Instruct (NVIDIA NIM - 40 RPM)", true, false, 128000, "0", "0", now),
+                ModelInfo("mistralai/mistral-7b-instruct-v0.3", "nvidia", "Mistral 7B Instruct v0.3 (NVIDIA NIM)", true, false, 32768, "0", "0", now),
+                ModelInfo("nvidia/nemotron-4-340b-instruct", "nvidia", "Nemotron 4 340B (NVIDIA NIM)", true, false, 4096, "0", "0", now),
+                ModelInfo("meta/llama-3.2-11b-vision-instruct", "nvidia", "Llama 3.2 11B Vision (NVIDIA NIM)", true, true, 128000, "0", "0", now),
+                ModelInfo("deepseek-ai/deepseek-r1", "nvidia", "DeepSeek R1 (NVIDIA NIM - 40 RPM)", true, false, 65536, "0", "0", now)
+            )
+            "groq" -> listOf(
+                ModelInfo("llama-3.3-70b-versatile", "groq", "Llama 3.3 70B Versatile (Groq)", true, false, 128000, "0", "0", now),
+                ModelInfo("llama-3.1-8b-instant", "groq", "Llama 3.1 8B Instant (Groq)", true, false, 128000, "0", "0", now),
+                ModelInfo("mixtral-8x7b-32768", "groq", "Mixtral 8x7B (Groq)", true, false, 32768, "0", "0", now),
+                ModelInfo("llama-3.2-11b-vision-preview", "groq", "Llama 3.2 11B Vision (Groq)", true, true, 8192, "0", "0", now)
+            )
+            "cerebras" -> listOf(
+                ModelInfo("llama3.1-8b", "cerebras", "Llama 3.1 8B (Cerebras Ultra-Fast)", true, false, 8192, "0", "0", now),
+                ModelInfo("llama3.1-70b", "cerebras", "Llama 3.1 70B (Cerebras Ultra-Fast)", true, false, 8192, "0", "0", now),
+                ModelInfo("llama-3.3-70b", "cerebras", "Llama 3.3 70B (Cerebras Ultra-Fast)", true, false, 8192, "0", "0", now)
+            )
+            "google_gemini" -> listOf(
+                ModelInfo("gemini-1.5-flash", "google_gemini", "Gemini 1.5 Flash (Google)", true, true, 1000000, "0", "0", now),
+                ModelInfo("gemini-1.5-pro", "google_gemini", "Gemini 1.5 Pro (Google)", true, true, 2000000, "0", "0", now),
+                ModelInfo("gemini-2.0-flash-exp", "google_gemini", "Gemini 2.0 Flash Exp (Google)", true, true, 1000000, "0", "0", now)
+            )
+            "openrouter" -> listOf(
+                ModelInfo("meta-llama/llama-3.3-70b-instruct:free", "openrouter", "Llama 3.3 70B (OpenRouter Free)", true, false, 128000, "0", "0", now),
+                ModelInfo("google/gemini-2.0-flash-exp:free", "openrouter", "Gemini 2.0 Flash (OpenRouter Free)", true, true, 1000000, "0", "0", now),
+                ModelInfo("deepseek/deepseek-r1:free", "openrouter", "DeepSeek R1 (OpenRouter Free)", true, false, 65536, "0", "0", now),
+                ModelInfo("qwen/qwen-2.5-coder-32b-instruct:free", "openrouter", "Qwen 2.5 Coder 32B (OpenRouter Free)", true, false, 32768, "0", "0", now)
+            )
             "pollinations" -> listOf(
                 ModelInfo("openai", "pollinations", "OpenAI GPT-4o Mini (Pollinations)", true, true, 8192, "0", "0", now),
                 ModelInfo("mistral", "pollinations", "Mistral Small (Pollinations)", true, false, 8192, "0", "0", now),
@@ -282,8 +310,7 @@ class OpenAIApiClient {
     }
 
     /**
-     * Envia mensagem de chat e consome o stream SSE token a token.
-     * Suporta OpenAI padrão e AI Horde assíncrono com polling.
+     * Envia mensagem de chat e consome o stream SSE token a token de forma limpa e síncrona dentro da coroutine.
      */
     fun streamChat(
         provider: Provider,
@@ -299,7 +326,7 @@ class OpenAIApiClient {
             return streamAiHordeChat(provider, modelId, apiKey, messages, systemPrompt, temperature, maxTokens)
         }
 
-        return callbackFlow {
+        return flow {
             val resolvedBase = provider.getResolvedBaseUrl(cloudflareAccountId).trimEnd('/')
             val endpoint = provider.chatEndpoint.let { if (it.startsWith("/")) it else "/$it" }
             val url = "$resolvedBase$endpoint"
@@ -373,59 +400,69 @@ class OpenAIApiClient {
             val request = requestBuilder.build()
             val call = okHttpClient.newCall(request)
 
-            call.enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) {
-                    close(Exception(sanitizeLog(e.message ?: "Falha na conexão com ${provider.name}")))
-                }
-
-                override fun onResponse(call: Call, response: Response) {
-                    if (!response.isSuccessful) {
-                        val code = response.code
-                        val retryAfter = response.header("Retry-After")?.toLongOrNull()
-                        val errorBody = try {
-                            response.body?.string()?.take(500)
-                        } catch (_: Exception) {
-                            null
-                        }
-                        val msg = sanitizeLog(errorBody ?: "HTTP $code em ${provider.name}")
-                        close(ApiException(code, msg, retryAfter))
-                        return
-                    }
-
-                    val body = response.body
-                    if (body == null) {
-                        close(Exception("Corpo de resposta nulo de ${provider.name}"))
-                        return
-                    }
-
-                    try {
-                        val source = body.source()
-                        val sseParser = SseParser()
-
-                        while (!source.exhausted() && !isClosedForSend) {
-                            val chunk = source.readUtf8(minOf(source.buffer.size, 4096L).coerceAtLeast(1024L))
-                            if (chunk.isNotEmpty()) {
-                                val done = sseParser.processChunk(chunk) { delta ->
-                                    trySend(delta)
-                                }
-                                if (done) {
-                                    break
-                                }
-                            }
-                        }
-                        close()
-                    } catch (e: Exception) {
-                        close(Exception(sanitizeLog(e.message)))
-                    } finally {
-                        body.close()
-                    }
-                }
-            })
-
-            awaitClose {
-                call.cancel()
+            val response = try {
+                call.execute()
+            } catch (e: IOException) {
+                throw Exception(sanitizeLog(e.message ?: "Falha na conexão com ${provider.name}"))
             }
-        }
+
+            if (!response.isSuccessful) {
+                val code = response.code
+                val retryAfter = response.header("Retry-After")?.toLongOrNull()
+                val errorBody = try {
+                    response.body?.string()?.take(500)
+                } catch (_: Exception) {
+                    null
+                }
+                response.close()
+                val msg = sanitizeLog(errorBody ?: "HTTP $code em ${provider.name}")
+                throw ApiException(code, msg, retryAfter)
+            }
+
+            val body = response.body
+            if (body == null) {
+                response.close()
+                throw Exception("Corpo de resposta nulo de ${provider.name}")
+            }
+
+            try {
+                val source = body.source()
+                val sseParser = SseParser()
+                val buffer = okio.Buffer()
+                var streamFinishedCleanly = false
+
+                while (true) {
+                    val bytesRead = try {
+                        source.read(buffer, 8192L)
+                    } catch (_: java.io.EOFException) {
+                        -1L
+                    } catch (e: IOException) {
+                        if (streamFinishedCleanly) -1L else throw e
+                    }
+
+                    if (bytesRead == -1L) {
+                        break
+                    }
+
+                    val chunk = buffer.readUtf8()
+                    if (chunk.isNotEmpty()) {
+                        val result = sseParser.processChunk(chunk)
+                        for (delta in result.deltas) {
+                            emit(delta)
+                        }
+                        if (result.isDone) {
+                            streamFinishedCleanly = true
+                            break
+                        }
+                    }
+                }
+            } catch (_: java.io.EOFException) {
+                // Fim natural do fluxo de eventos
+            } finally {
+                try { body.close() } catch (_: Exception) {}
+                try { response.close() } catch (_: Exception) {}
+            }
+        }.flowOn(Dispatchers.IO)
     }
 
     /**
@@ -444,7 +481,6 @@ class OpenAIApiClient {
     ): Flow<String> = flow {
         val effectiveKey = apiKey?.takeIf { it.isNotBlank() } ?: provider.defaultApiKey ?: "0000000000"
 
-        // Monta o prompt em formato de conversação
         val fullPromptBuilder = StringBuilder()
         if (systemPrompt.isNotBlank()) {
             fullPromptBuilder.append("System: ").append(systemPrompt).append("\n\n")
@@ -490,7 +526,6 @@ class OpenAIApiClient {
 
         emit("Aguardando worker no cluster do AI Horde…\n\n")
 
-        // Polling de status
         var isDone = false
         var attempts = 0
         while (!isDone && attempts < 30) {

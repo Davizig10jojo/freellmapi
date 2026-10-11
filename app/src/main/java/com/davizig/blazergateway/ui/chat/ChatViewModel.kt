@@ -182,7 +182,7 @@ class ChatViewModel(
                     userPrompt = prompt,
                     imageBase64 = image,
                     onCooldownWait = { waitSeconds ->
-                        _cooldownNotice.value = "Todos os provedores em cooldown. Aguardando ${waitSeconds}s..."
+                        _cooldownNotice.value = "Limite de requisições por minuto atingido (ex: NVIDIA NIM tem 40 RPM). Aguardando ${waitSeconds}s..."
                     },
                     onError = { err ->
                         _errorNotice.value = err
@@ -191,6 +191,15 @@ class ChatViewModel(
             } finally {
                 _isStreaming.value = false
             }
+        }
+    }
+
+    fun resetCooldownsAndRetry() {
+        viewModelScope.launch {
+            chatRepository.clearCooldowns()
+            _cooldownNotice.value = null
+            _errorNotice.value = null
+            regenerate()
         }
     }
 

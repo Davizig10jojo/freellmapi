@@ -205,7 +205,7 @@ class ChatRepository(
 
         // Provedor/modelo preferido da conversa
         val preferredProvider = allProviders.firstOrNull { it.id == conversation.providerId }
-        if (preferredProvider != null) {
+        if (preferredProvider != null && conversation.modelId != "auto") {
             candidatePairs.add(preferredProvider to conversation.modelId)
         }
 
@@ -226,7 +226,17 @@ class ChatRepository(
 
             val chosenModel = prov.selectedModelId
                 ?: validModels.firstOrNull()?.id
-                ?: if (prov.id == "pollinations") "openai" else "default"
+                ?: when (prov.id) {
+                    "pollinations" -> "openai"
+                    "kilo" -> "kilo-auto-free"
+                    "ovh" -> "qwen3.8-27b"
+                    "aihorde" -> "Gemma 4 31B Heretic"
+                    "groq" -> "llama-3.3-70b-versatile"
+                    "cerebras" -> "llama3.1-8b"
+                    "nvidia" -> "meta/llama-3.1-8b-instruct"
+                    "google_gemini" -> "gemini-1.5-flash"
+                    else -> "default"
+                }
 
             val pair = prov to chosenModel
             if (!candidatePairs.contains(pair)) {
@@ -235,8 +245,13 @@ class ChatRepository(
         }
 
         if (candidatePairs.isEmpty()) {
-            messageDao.deleteById(assistantMessageId)
-            onError("Nenhum provedor com chave configurada está disponível.")
+            messageDao.insertOrUpdate(
+                placeholder.copy(
+                    content = "⚠️ Nenhum provedor ativo com chave configurada ou plano gratuito disponível.",
+                    isStreaming = false
+                )
+            )
+            onError("Nenhum provedor disponível.")
             return
         }
 
@@ -253,8 +268,22 @@ class ChatRepository(
                 // Todos em cooldown ou saturados
                 val waitSeconds = smartRouter.getMinCooldownRemainingSeconds(currentCandidates)
                 onCooldownWait(waitSeconds)
-                messageDao.deleteById(assistantMessageId)
-                onError("Todos os provedores estão em período de espera. Aguarde $waitSeconds segundos.")
+                if (fullAccumulator.isNotEmpty()) {
+                    messageDao.insertOrUpdate(
+                        placeholder.copy(
+                            content = fullAccumulator.toString(),
+                            isStreaming = false
+                        )
+                    )
+                } else {
+                    messageDao.insertOrUpdate(
+                        placeholder.copy(
+                            content = "⚠️ Provedores em intervalo de taxa de requisições. Aguarde ${waitSeconds}s ou toque em 'Resetar Espera'.",
+                            isStreaming = false
+                        )
+                    )
+                }
+                onError("Aguarde $waitSeconds segundos de intervalo de taxa.")
                 return
             }
 
@@ -311,7 +340,7 @@ class ChatRepository(
                 )
                 streamSucceeded = true
             } catch (e: CancellationException) {
-                // Cancelado pelo usuário
+                // Cancelado pelo usuário: mantém o que foi transmitido
                 messageDao.insertOrUpdate(
                     placeholder.copy(
                         content = fullAccumulator.toString(),
@@ -322,21 +351,49 @@ class ChatRepository(
                 )
                 return
             } catch (e: Exception) {
+                // Se acumulou texto, NUNCA apaga a mensagem gerada!
+                if (fullAccumulator.isNotEmpty()) {
+                    messageDao.insertOrUpdate(
+                        placeholder.copy(
+                            content = fullAccumulator.toString(),
+                            providerId = currentProvider.id,
+                            modelId = currentModel,
+                            isStreaming = false
+                        )
+                    )
+                    smartRouter.recordSuccess(currentProvider.id, currentModel)
+                    streamSucceeded = true
+                    return
+                }
+
                 val statusCode = if (e is ApiException) e.statusCode else 500
                 val retryAfter = (e as? ApiException)?.retryAfterSeconds
 
                 smartRouter.recordFailure(currentProvider.id, currentModel, statusCode, retryAfter)
 
-                // Remove candidato falho e tenta o próximo pelo roteador
-                currentCandidates = currentCandidates.filterNot { it.first.id == currentProvider.id }
+                // Remove candidato que falhou e tenta o próximo pelo roteador
+                currentCandidates = currentCandidates.filterNot { it.first.id == currentProvider.id && it.second == currentModel }
 
                 if (currentCandidates.isEmpty()) {
-                    messageDao.deleteById(assistantMessageId)
-                    onError("Falha em todos os provedores: ${e.message}")
+                    val limitNote = if (currentProvider.id == "nvidia") {
+                        " (A NVIDIA NIM opera no limite de 40 requisições/minuto. Aguarde alguns segundos)"
+                    } else ""
+                    val errorText = "⚠️ Falha ao obter resposta de ${currentProvider.name}$limitNote: ${e.message}."
+                    messageDao.insertOrUpdate(
+                        placeholder.copy(
+                            content = errorText,
+                            isStreaming = false
+                        )
+                    )
+                    onError(errorText)
                     return
                 }
             }
         }
+    }
+
+    suspend fun clearCooldowns() {
+        smartRouter.clearAllCooldowns()
     }
 
     private fun ConversationEntity.toDomain() = Conversation(
